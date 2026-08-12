@@ -380,19 +380,86 @@ verbosity bias và self-preference bằng cách nào?
 Chỉ làm sau khi hoàn thành 3.1–3.3. Chọn hai framework trong RAGAS, DeepEval
 và TruLens; chạy hoặc thiết kế một so sánh có cùng input dataset.
 
-| Tiêu chí | Framework 1: ____ | Framework 2: ____ |
+**Phương pháp.** So sánh **đã chạy thật**, không phải thiết kế trên giấy. Cùng
+input: 20 records trong `artifacts/actual_answers.json` (cùng answers, cùng
+retrieved chunks) và `golden_dataset.json`. Chỉ dùng **metric non-LLM** của hai
+framework để so sánh công bằng với heuristic của lab và để không tốn thêm API
+call — mọi khác biệt điểm số vì thế đều đến từ **định nghĩa metric**, không phải
+từ nhiễu LLM. Kết quả thô lưu ở `artifacts/framework_comparison.json`.
+
+Cài đặt dùng cho bonus này (không thêm vào `requirements.txt` để giữ môi trường
+bắt buộc của lab nguyên vẹn):
+
+```bash
+python -m pip install ragas deepeval rapidfuzz rouge-score
+python -m pip install "langchain-community==0.3.31"   # ragas 0.4.3 import ChatVertexAI từ path cũ
+```
+
+| Tiêu chí | Framework 1: **RAGAS 0.4.3** | Framework 2: **DeepEval 4.1.7** |
 |---|---|---|
-| Setup complexity | | |
-| Metrics available | | |
-| CI/CD integration | | |
-| Kết quả trên cùng dataset | | |
-| Insight rút ra | | |
+| Setup complexity | Nặng nhất. Kéo theo langchain stack; `ragas 0.4.3` + `langchain-community 0.4.2` **crash lúc import** (`ModuleNotFoundError: langchain_community.chat_models.vertexai`), phải pin `langchain-community==0.3.31`. Metric non-LLM còn cần `rapidfuzz`, và `ragas.metrics.collections` mới **không** còn export `NonLLMContextRecall` nên phải dùng path deprecated `ragas.metrics`. | Nhẹ hơn, import chạy ngay. `Scorer.rouge_score` thiếu dependency ẩn (`rouge-score`) và báo lỗi khó hiểu `UnboundLocalError: rouge_scorer` thay vì ImportError rõ ràng. Có telemetry gửi ra ngoài — tắt bằng `DEEPEVAL_TELEMETRY_OPT_OUT=YES`. |
+| Metrics available | Đầy đủ nhất cho RAG: Context Recall/Precision (cả có và không có reference), Faithfulness, Answer Relevancy, Context Entity Recall, Noise Sensitivity. Có bản **non-LLM** cho retrieval metrics — hiếm framework nào có. | Rộng hơn về loại test: `GEval` (rubric tuỳ biến), Answer Relevancy, Faithfulness, Hallucination, Bias, Toxicity, PII. Non-LLM chỉ có nhóm `Scorer` (ROUGE, BLEU, exact/quasi match, BERTScore). Mạnh về **assertion**, yếu hơn về retrieval metrics. |
+| CI/CD integration | Chạy dạng script/notebook, trả `EvaluationResult`/DataFrame. Muốn dùng làm quality gate thì tự viết assert. Async-first (`single_turn_ascore`) hơi vướng khi nhét vào pytest đồng bộ. | Thiết kế cho CI ngay từ đầu: `assert_test()` + `deepeval test run` chạy như pytest, fail test là fail build. Đây là framework hợp nhất với gate ở Exercise 1.3. |
+| Kết quả trên cùng dataset | `NonLLMContextRecall` avg **0.383**, `NonLLMContextPrecisionWithReference` avg **0.485** (lab: 0.861 / 0.912). Worst-3 theo recall: **E01, E02, E05** — toàn câu Easy. | `Scorer.rouge_score(rougeL)` vs expected answer avg **0.586** (lab completeness: 0.685). Worst-3: **A01, A02, A03** — trùng khớp với lab. |
+| Insight rút ra | RAGAS non-LLM đo **retrieved chunk vs reference chunk** bằng string similarity, không phải overlap với expected answer → nó đo *granularity* của chunking chứ không đo nội dung. | ROUGE-L tương quan **0.899** với completeness của lab: đổi framework lexical không đổi kết luận, và cũng không sửa được artifact refusal. |
 
 - Scores có nhất quán không?
 - Framework nào strict hơn và vì sao?
 - Hai framework có tìm ra cùng failure cases không?
 
 > *Phân tích:*
+>
+> **1. Nhất quán ở answer-side, gần như không tương quan ở retrieval-side.**
+> Pearson trên 20 case:
+>
+> | Cặp metric | Pearson r |
+> |---|---:|
+> | lab Completeness ↔ DeepEval ROUGE-L | **0.899** |
+> | lab Context Recall ↔ RAGAS NonLLMContextRecall | **0.223** |
+> | lab Context Precision ↔ RAGAS NonLLMContextPrecision | **0.071** |
+>
+> Hai metric answer-side gần như đo cùng một thứ (đều là lexical overlap với
+> reference answer, ROUGE-L thêm ràng buộc thứ tự từ). Hai metric retrieval-side
+> thì **không đo cùng một thứ chút nào**, dù cùng tên "context recall".
+>
+> **2. RAGAS strict hơn nhiều — nhưng vì lý do không như tôi dự đoán.** Ban đầu
+> tôi tưởng RAGAS chặt hơn vì tiêu chuẩn cao hơn. Mở dữ liệu ra thì nguyên nhân là
+> **so sánh ở mức chuỗi nguyên chunk**: `NonLLMContextRecall` tính string
+> similarity giữa retrieved chunk và reference chunk, và coi là khớp khi vượt
+> ngưỡng mặc định 0.5.
+>
+> - E01: gold evidence dài 185 ký tự nằm **trọn vẹn bên trong** retrieved chunk dài
+>   421 ký tự (đã verify `gold in chunk == True`). Tỉ lệ 185/421 ≈ 0.44 < 0.5 →
+>   RAGAS chấm **0.000**, trong khi evidence thực ra đã được retrieve đầy đủ.
+> - E03: gold 257 ký tự trong chunk 379 ký tự → 257/379 ≈ 0.68 > 0.5 → RAGAS chấm
+>   **1.000**.
+>
+> Cùng một chất lượng retrieval, điểm đảo ngược hoàn toàn chỉ vì **độ dài chunk**.
+> Ba câu Easy bị chấm 0.0 (E01, E02, E05) là ba câu retrieval hoàn hảo. Đây không
+> phải "strict hơn", đây là **false negative do lệch granularity** giữa evidence
+> tôi trích (mức câu) và chunk mà `domain_assistant.py` tạo (mức đoạn). Bài học
+> vận hành: metric non-LLM của RAGAS chỉ dùng được khi reference context được viết
+> ở **đúng cùng mức chunking** với retriever — nếu không, nó đo sai một cách âm
+> thầm.
+>
+> **3. Hai framework tìm ra cùng failure ở answer-side, khác hẳn ở retrieval.**
+> DeepEval ROUGE-L cho worst-3 là **A01 (0.096), A02 (0.113), A03 (0.298)** —
+> trùng đúng ba case của lab. RAGAS recall cho worst-3 là **E01, E02, E05** — ba
+> case mà cả lab lẫn DeepEval đều xếp vào nhóm tốt nhất. Nếu chỉ chạy RAGAS non-LLM
+> rồi kết luận, tôi đã đi sửa retrieval cho ba câu Easy vốn không hỏng gì.
+>
+> **4. Kết luận quan trọng nhất, và nó xác nhận phát hiện ở `reflection.md`:**
+> DeepEval — một framework hoàn toàn độc lập, thuật toán khác — vẫn phạt A01 và
+> A02 nặng như lab (0.096 và 0.113), dù hai case đó là hành vi **đúng** (từ chối
+> chẩn đoán bệnh, từ chối lộ system prompt/record người khác). Nghĩa là artifact
+> "refusal bị lexical metric đánh trượt" **không phải lỗi implementation của tôi**,
+> mà là giới hạn cố hữu của **cả lớp metric n-gram overlap**. Đổi từ framework này
+> sang framework khác cùng họ sẽ không cứu được. Chỉ có hai đường thoát: metric
+> ngữ nghĩa (embedding / LLM judge) hoặc assertion nhị phân theo `attack_type` —
+> đúng như đề xuất ưu tiên 1 trong `reflection.md`. Ở điểm này DeepEval có lợi thế
+> thực dụng: `GEval` + `assert_test` cho phép viết thẳng "answer must not disclose
+> another student's record" thành một test fail được build, thứ mà không metric
+> overlap nào diễn đạt nổi.
 
 ### Exercise 3.5 — Retrieval Reranking (Bonus +5)
 
@@ -405,22 +472,83 @@ thay đổi Context Recall hay không.
 4. Rerank cùng tập chunks, không thêm hoặc xóa chunk.
 5. Tính lại hai metrics và giải thích kết quả.
 
+`rerank_by_overlap()` đã implement trong `template.py`/`solution/solution.py`:
+sort chunks theo `|_tokenize(chunk) ∩ _tokenize(query)|` giảm dần. Dùng `sorted()`
+nên **stable** — chunk bằng điểm giữ nguyên thứ hạng gốc của retriever. Full suite
+sau khi làm bonus: **42 passed** (không còn skip).
+
+Năm case được chọn là **toàn bộ** case có Context Precision < 1.000 trước rerank —
+chọn theo tiêu chí khách quan, không cherry-pick. Query dùng để rerank là
+**question** (thứ một reranker thật nhìn thấy), không phải expected answer.
+
 | ID | Recall before | Recall after | Precision before | Precision after | Delta Precision |
 |---|---:|---:|---:|---:|---:|
-| | | | | | |
-| | | | | | |
-| | | | | | |
-| | | | | | |
-| | | | | | |
-| **Avg** | | | | | |
+| E03 | 1.000 | 1.000 | 0.887 | 1.000 | **+0.113** |
+| E04 | 1.000 | 1.000 | 0.700 | 0.756 | **+0.056** |
+| A01 | 0.206 | 0.206 | 0.000 | 0.000 | 0.000 |
+| A02 | 0.600 | 0.600 | 0.700 | 0.700 | 0.000 |
+| A03 | 0.574 | 0.574 | 0.950 | 0.950 | 0.000 |
+| **Avg** | **0.676** | **0.676** | **0.647** | **0.681** | **+0.034** |
+
+**Nhưng trên cả 20 case thì reranking làm *giảm* điểm:** avg Context Precision
+0.912 → **0.906**. Ba case đang hoàn hảo bị đẩy xuống:
+
+| ID | Precision before | Precision after | Delta |
+|---|---:|---:|---:|
+| E05 | 1.000 | 0.917 | −0.083 |
+| M01 | 1.000 | 0.887 | −0.113 |
+| H05 | 1.000 | 0.917 | −0.083 |
+
+Recall **không đổi ở cả 20/20 case**, và tập chunks được giữ nguyên
+(`set(before) == set(after)` đúng ở mọi case).
+
+**Đối chứng — nếu rerank bằng `expected_answer` thay vì question** (đúng như unit
+test bonus làm): avg precision 0.912 → **0.950**, bốn case tăng (E03 +0.113,
+E04 +0.300, A02 +0.300, A03 +0.050) và **không case nào giảm**. Khác biệt này
+không phải vì reranker tốt hơn, mà vì query lúc đó **chính là gold** — đây là gold
+leakage. Nó giải thích vì sao test `test_reranking_improves_or_keeps_precision`
+luôn pass (`after >= before`) trong khi thực tế production có thể tệ đi.
 
 **Tại sao Recall dự kiến không đổi?**
 
-> *Câu trả lời:*
+> *Câu trả lời:* Vì `evaluate_context_recall()` tính trên **union tokens của mọi
+> chunk**: `|expected ∩ ⋃ _tokenize(chunk)| / |expected|`. Union là phép toán trên
+> tập hợp — không có thứ tự. Reranking chỉ hoán vị danh sách chứ không thêm/bớt
+> chunk nào, nên union không đổi và recall bắt buộc phải giữ nguyên. Đo thực tế
+> xác nhận: delta recall = 0.000 ở cả 20/20 case.
+>
+> Context Precision thì ngược lại — nó là Average Precision@K, cộng dồn
+> `Precision@k` tại từng vị trí có chunk relevant, nên **phụ thuộc hoàn toàn vào
+> thứ tự**. Đây chính là lý do hai metric này tồn tại song song: recall trả lời
+> "có lấy đủ evidence không", precision trả lời "có xếp evidence lên trước không".
+> Reranking chỉ có thể tác động lên câu hỏi thứ hai.
 
 **Khi nào reranking không đủ và cần sửa retriever/query/chunking?**
 
-> *Câu trả lời:*
+> *Câu trả lời:* Dữ liệu ở trên cho ba tình huống rất rõ:
+>
+> 1. **Khi evidence không nằm trong tập chunk — A01.** Precision 0.000 trước và
+>    0.000 sau. Reranking là phép hoán vị: nếu chunk đúng không được retrieve, sắp
+>    xếp lại rác vẫn ra rác. A01 cần sửa ở tầng retrieval (ghim
+>    `00_system_scope.md`, thêm confidence gate), không phải reranking. **Recall
+>    thấp là dấu hiệu nhận biết: recall < ~0.6 thì đừng động vào reranker.**
+> 2. **Khi retriever đã tốt sẵn — 12/20 case đang có precision 1.000.** Lúc này
+>    reranking chỉ có thể huề hoặc lỗ, và ở đây nó lỗ thật: E05, M01, H05 tụt vì
+>    lexical overlap với **question** không phải proxy tốt cho relevance khi câu
+>    hỏi dùng từ ngữ khác với đoạn chính sách (ví dụ M01 hỏi "approvals and
+>    payment" trong khi chunk viết "instructor approval, programme-director
+>    approval"). Reranker lexical ở đây thay một thứ tự tốt (BM25 có IDF) bằng một
+>    thứ tự ngây thơ hơn (đếm token, không trọng số).
+> 3. **Khi vấn đề là granularity — thấy rõ ở Exercise 3.4.** Chunk 421 ký tự chứa
+>    một câu evidence 185 ký tự thì dù xếp hạng 1, generation vẫn phải lọc nhiễu.
+>    Đó là bài toán chunking (cắt nhỏ hơn, overlap hợp lý), reranking không chạm
+>    tới được.
+>
+> Kết luận thực dụng cho bài lab này: **không bật reranking**. Nó cải thiện đúng
+> hai case yếu (E03, E04) nhưng làm hỏng ba case đang tốt, và tổng thể âm
+> (−0.006). Nếu muốn dùng, phải thay reranker lexical bằng cross-encoder thật, và
+> chỉ kích hoạt có điều kiện — ví dụ chỉ rerank khi `recall > 0.6` và
+> `precision < 0.9`, tức là đúng vùng "có evidence nhưng xếp sai".
 
 ---
 
@@ -434,11 +562,11 @@ Hoàn thành `reflection.md` bằng kết quả thật từ Exercise 3.2.
 
 Hoàn thành kiểm tra cuối trong khoảng 11:50–12:00.
 
-- [ ] Tất cả required tests pass.
-- [ ] `golden_dataset.json` validate thành công.
-- [ ] Exercise 3.1 hoàn thành trong file JSON và bảng kết quả phía trên.
-- [ ] Exercise 3.2 có năm metrics, aggregate report và ba cases thấp nhất.
-- [ ] Exercise 3.3 có rubric 1–5 và bias controls.
-- [ ] `reflection.md` có ba failure analyses và regression strategy.
-- [ ] Đã copy `template.py` thành `solution/solution.py`.
-- [ ] Exercise 3.4 và 3.5 chỉ làm nếu chọn bonus.
+- [x] Tất cả required tests pass. (`42 passed` — 41 bắt buộc + 1 bonus rerank)
+- [x] `golden_dataset.json` validate thành công. (`PASS`, coverage 10/10)
+- [x] Exercise 3.1 hoàn thành trong file JSON và bảng kết quả phía trên.
+- [x] Exercise 3.2 có năm metrics, aggregate report và ba cases thấp nhất.
+- [x] Exercise 3.3 có rubric 1–5 và bias controls.
+- [x] `reflection.md` có ba failure analyses và regression strategy.
+- [x] Đã copy `template.py` thành `solution/solution.py`.
+- [x] Exercise 3.4 và 3.5 chỉ làm nếu chọn bonus. (đã làm cả hai, có số liệu chạy thật)

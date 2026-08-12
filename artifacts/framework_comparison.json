@@ -1,0 +1,182 @@
+[
+  {
+    "id": "E01",
+    "lab_recall": 1.0,
+    "ragas_recall": 0.0,
+    "lab_precision": 1.0,
+    "ragas_precision": 0.0,
+    "lab_completeness": 1.0,
+    "deepeval_rougeL": 1.0
+  },
+  {
+    "id": "E02",
+    "lab_recall": 1.0,
+    "ragas_recall": 0.0,
+    "lab_precision": 1.0,
+    "ragas_precision": 0.0,
+    "lab_completeness": 1.0,
+    "deepeval_rougeL": 0.6382978723404256
+  },
+  {
+    "id": "E03",
+    "lab_recall": 1.0,
+    "ragas_recall": 1.0,
+    "lab_precision": 0.8875,
+    "ragas_precision": 0.9999999999,
+    "lab_completeness": 0.7307692307692307,
+    "deepeval_rougeL": 0.7692307692307692
+  },
+  {
+    "id": "E04",
+    "lab_recall": 1.0,
+    "ragas_recall": 1.0,
+    "lab_precision": 0.7000000000000001,
+    "ragas_precision": 0.9999999999,
+    "lab_completeness": 0.9,
+    "deepeval_rougeL": 0.5714285714285713
+  },
+  {
+    "id": "E05",
+    "lab_recall": 1.0,
+    "ragas_recall": 0.0,
+    "lab_precision": 1.0,
+    "ragas_precision": 0.0,
+    "lab_completeness": 0.9230769230769231,
+    "deepeval_rougeL": 0.8095238095238095
+  },
+  {
+    "id": "M01",
+    "lab_recall": 0.9642857142857143,
+    "ragas_recall": 0.5,
+    "lab_precision": 1.0,
+    "ragas_precision": 0.49999999995,
+    "lab_completeness": 0.8928571428571429,
+    "deepeval_rougeL": 0.9072164948453608
+  },
+  {
+    "id": "M02",
+    "lab_recall": 0.9736842105263158,
+    "ragas_recall": 0.5,
+    "lab_precision": 1.0,
+    "ragas_precision": 0.49999999995,
+    "lab_completeness": 0.8947368421052632,
+    "deepeval_rougeL": 0.9166666666666666
+  },
+  {
+    "id": "M03",
+    "lab_recall": 0.9,
+    "ragas_recall": 0.0,
+    "lab_precision": 1.0,
+    "ragas_precision": 0.0,
+    "lab_completeness": 0.9,
+    "deepeval_rougeL": 0.6666666666666666
+  },
+  {
+    "id": "M04",
+    "lab_recall": 0.9230769230769231,
+    "ragas_recall": 0.5,
+    "lab_precision": 1.0,
+    "ragas_precision": 0.9999999999,
+    "lab_completeness": 0.7948717948717948,
+    "deepeval_rougeL": 0.6578947368421053
+  },
+  {
+    "id": "M05",
+    "lab_recall": 0.9761904761904762,
+    "ragas_recall": 0.0,
+    "lab_precision": 1.0,
+    "ragas_precision": 0.0,
+    "lab_completeness": 0.9523809523809523,
+    "deepeval_rougeL": 0.7320261437908496
+  },
+  {
+    "id": "M06",
+    "lab_recall": 0.9142857142857143,
+    "ragas_recall": 0.5,
+    "lab_precision": 1.0,
+    "ragas_precision": 0.9999999999,
+    "lab_completeness": 0.6857142857142857,
+    "deepeval_rougeL": 0.5660377358490565
+  },
+  {
+    "id": "M07",
+    "lab_recall": 0.9302325581395349,
+    "ragas_recall": 0.0,
+    "lab_precision": 1.0,
+    "ragas_precision": 0.0,
+    "lab_completeness": 0.5581395348837209,
+    "deepeval_rougeL": 0.6019417475728156
+  },
+  {
+    "id": "H01",
+    "lab_recall": 0.8857142857142857,
+    "ragas_recall": 0.5,
+    "lab_precision": 1.0,
+    "ragas_precision": 0.9999999999,
+    "lab_completeness": 0.5714285714285714,
+    "deepeval_rougeL": 0.3571428571428571
+  },
+  {
+    "id": "H02",
+    "lab_recall": 0.625,
+    "ragas_recall": 0.6666666666666666,
+    "lab_precision": 1.0,
+    "ragas_precision": 0.36666666664833336,
+    "lab_completeness": 0.5,
+    "deepeval_rougeL": 0.39639639639639634
+  },
+  {
+    "id": "H03",
+    "lab_recall": 0.782608695652174,
+    "ragas_recall": 0.5,
+    "lab_precision": 1.0,
+    "ragas_precision": 0.9999999999,
+    "lab_completeness": 0.8260869565217391,
+    "deepeval_rougeL": 0.623529411764706
+  },
+  {
+    "id": "H04",
+    "lab_recall": 0.9565217391304348,
+    "ragas_recall": 0.5,
+    "lab_precision": 1.0,
+    "ragas_precision": 0.49999999995,
+    "lab_completeness": 0.782608695652174,
+    "deepeval_rougeL": 0.64
+  },
+  {
+    "id": "H05",
+    "lab_recall": 1.0,
+    "ragas_recall": 1.0,
+    "lab_precision": 1.0,
+    "ragas_precision": 0.8333333332916666,
+    "lab_completeness": 0.35135135135135137,
+    "deepeval_rougeL": 0.3541666666666667
+  },
+  {
+    "id": "A01",
+    "lab_recall": 0.20588235294117646,
+    "ragas_recall": 0.0,
+    "lab_precision": 0.0,
+    "ragas_precision": 0.0,
+    "lab_completeness": 0.058823529411764705,
+    "deepeval_rougeL": 0.0963855421686747
+  },
+  {
+    "id": "A02",
+    "lab_recall": 0.6,
+    "ragas_recall": 0.5,
+    "lab_precision": 0.7,
+    "ragas_precision": 0.9999999999,
+    "lab_completeness": 0.075,
+    "deepeval_rougeL": 0.11267605633802816
+  },
+  {
+    "id": "A03",
+    "lab_recall": 0.574468085106383,
+    "ragas_recall": 0.0,
+    "lab_precision": 0.95,
+    "ragas_precision": 0.0,
+    "lab_completeness": 0.2978723404255319,
+    "deepeval_rougeL": 0.2975206611570248
+  }
+]
