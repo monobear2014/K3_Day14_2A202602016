@@ -528,10 +528,22 @@ class BenchmarkRunner:
         Returns:
             List of EvalResult, one per qa_pair.
         """
-        # TODO: for each pair, call agent_fn(pair.question), then run_full_eval.
-        # Pass pair.retrieved_contexts as the optional contexts argument and
-        # preserve the original pair on the returned EvalResult.
-        raise NotImplementedError("Implement BenchmarkRunner.run")
+        results: list[EvalResult] = []
+        for pair in qa_pairs:
+            answer = agent_fn(pair.question)
+            result = evaluator.run_full_eval(
+                answer=answer,
+                question=pair.question,
+                context=pair.context,
+                expected=pair.expected_answer,
+                # No retrieval trace on the pair => retrieval metrics stay None
+                # instead of being scored against an empty chunk list.
+                contexts=pair.retrieved_contexts or None,
+            )
+            # Keep the original pair (with its metadata) on the result.
+            result.qa_pair = pair
+            results.append(result)
+        return results
 
     def generate_report(self, results: list[EvalResult]) -> dict[str, Any]:
         """
@@ -553,8 +565,44 @@ class BenchmarkRunner:
         Average only non-None retrieval scores. Return None for a retrieval
         average when no result contains that metric.
         """
-        # TODO
-        raise NotImplementedError("Implement generate_report")
+        total = len(results)
+        if total == 0:
+            return {
+                "total": 0,
+                "passed": 0,
+                "pass_rate": 0.0,
+                "avg_faithfulness": 0.0,
+                "avg_relevance": 0.0,
+                "avg_completeness": 0.0,
+                "avg_context_recall": None,
+                "avg_context_precision": None,
+                "failure_types": {},
+            }
+
+        passed = sum(1 for r in results if r.passed)
+
+        failure_types: dict[str, int] = {}
+        for r in results:
+            if r.failure_type:
+                failure_types[r.failure_type] = failure_types.get(r.failure_type, 0) + 1
+
+        def _avg_optional(attr: str) -> float | None:
+            values = [
+                getattr(r, attr) for r in results if getattr(r, attr) is not None
+            ]
+            return sum(values) / len(values) if values else None
+
+        return {
+            "total": total,
+            "passed": passed,
+            "pass_rate": passed / total,
+            "avg_faithfulness": sum(r.faithfulness for r in results) / total,
+            "avg_relevance": sum(r.relevance for r in results) / total,
+            "avg_completeness": sum(r.completeness for r in results) / total,
+            "avg_context_recall": _avg_optional("context_recall"),
+            "avg_context_precision": _avg_optional("context_precision"),
+            "failure_types": failure_types,
+        }
 
     def run_regression(self, new_results: list, baseline_results: list) -> dict:
         """Compare new evaluation results against a baseline.
@@ -576,9 +624,28 @@ class BenchmarkRunner:
               - 'regressions': list[str] — names of metrics that regressed
               - 'passed': bool — True if no regressions
 
-        TODO: Compute avg per metric, compare, list regressions, set passed flag
         """
-        raise NotImplementedError
+        metrics = ("faithfulness", "relevance", "completeness")
+
+        def _avg(results: list, metric: str) -> float:
+            if not results:
+                return 0.0
+            return sum(getattr(r, metric) for r in results) / len(results)
+
+        report: dict[str, Any] = {}
+        regressions: list[str] = []
+        for metric in metrics:
+            new_avg = _avg(new_results, metric)
+            baseline_avg = _avg(baseline_results, metric)
+            report[f"new_avg_{metric}"] = new_avg
+            report[f"baseline_avg_{metric}"] = baseline_avg
+            # Regression = drop of more than 0.05 versus baseline.
+            if baseline_avg - new_avg > 0.05:
+                regressions.append(metric)
+
+        report["regressions"] = regressions
+        report["passed"] = not regressions
+        return report
 
     def identify_failures(
         self,
@@ -595,8 +662,11 @@ class BenchmarkRunner:
         Returns:
             List of failing EvalResults.
         """
-        # TODO
-        raise NotImplementedError("Implement identify_failures")
+        return [
+            r
+            for r in results
+            if min(r.faithfulness, r.relevance, r.completeness) < threshold
+        ]
 
 
 # ---------------------------------------------------------------------------
