@@ -700,8 +700,11 @@ class FailureAnalyzer:
             dict mapping failure_type → count.
             Example: {"hallucination": 3, "irrelevant": 2, "incomplete": 5}
         """
-        # TODO
-        raise NotImplementedError("Implement categorize_failures")
+        categories: dict[str, int] = {}
+        for failure in failures:
+            key = failure.failure_type or "unknown"
+            categories[key] = categories.get(key, 0) + 1
+        return categories
 
     def find_root_cause(self, failure: EvalResult) -> str:
         """
@@ -713,8 +716,25 @@ class FailureAnalyzer:
             "Answer is missing key information — increase context window or improve generation"
             "Multiple issues detected — review full pipeline"
         """
-        # TODO: compare faithfulness, relevance, completeness, return appropriate string
-        raise NotImplementedError("Implement find_root_cause")
+        scores = {
+            "faithfulness": failure.faithfulness,
+            "relevance": failure.relevance,
+            "completeness": failure.completeness,
+        }
+        lowest = min(scores.values())
+        tied = [name for name, value in scores.items() if value == lowest]
+
+        # Several metrics equally low => the whole pipeline needs a look.
+        if len(tied) > 1:
+            return "Multiple issues detected — review full pipeline"
+        if tied[0] == "faithfulness":
+            return "Context is missing or irrelevant — improve retrieval"
+        if tied[0] == "relevance":
+            return "Answer does not address the question — improve prompt clarity"
+        return (
+            "Answer is missing key information — increase context window "
+            "or improve generation"
+        )
 
     def generate_improvement_log(self, failures: list, suggestions: list[str]) -> str:
         """Generate a Markdown table logging failures and improvement actions.
@@ -731,9 +751,21 @@ class FailureAnalyzer:
         Returns:
             Markdown table string with a row per failure. Status is always "Open".
 
-        TODO: Build markdown table with failure details + matched suggestions
         """
-        raise NotImplementedError
+        lines = [
+            "| Failure ID | Type | Root Cause | Suggested Fix | Status |",
+            "|------------|------|------------|---------------|--------|",
+        ]
+        for index, failure in enumerate(failures):
+            failure_id = f"F{index + 1:03d}"
+            failure_type = failure.failure_type or "unknown"
+            root_cause = self.find_root_cause(failure)
+            # Suggestions may be a shorter list than failures.
+            fix = suggestions[index] if index < len(suggestions) else "TBD"
+            lines.append(
+                f"| {failure_id} | {failure_type} | {root_cause} | {fix} | Open |"
+            )
+        return "\n".join(lines)
 
     def generate_improvement_suggestions(
         self, failures: list[EvalResult]
@@ -751,8 +783,60 @@ class FailureAnalyzer:
         Returns:
             List of at least 3 suggestion strings (or fewer if failures is empty).
         """
-        # TODO: analyze categorized failures and return suggestions
-        raise NotImplementedError("Implement generate_improvement_suggestions")
+        if not failures:
+            return []
+
+        categories = self.categorize_failures(failures)
+        by_type = {
+            "hallucination": (
+                "Implement a hallucination checker that filters claims not "
+                "supported by the retrieved context"
+            ),
+            "irrelevant": (
+                "Clarify the system prompt so the answer must address the "
+                "user's question directly"
+            ),
+            "incomplete": (
+                "Add few-shot examples showing complete answers, and increase "
+                "chunk size / top-k so required evidence fits in context"
+            ),
+            "off_topic": (
+                "Add intent detection and scope guardrails to route off-topic "
+                "questions instead of answering them"
+            ),
+            "refusal": (
+                "Loosen over-strict guardrails so in-scope questions are "
+                "answered instead of refused"
+            ),
+        }
+
+        # Most frequent failure types first — fix the biggest cluster first.
+        suggestions = [
+            by_type.get(
+                failure_type,
+                f"Investigate recurring '{failure_type}' failures and add a "
+                "targeted regression case",
+            )
+            for failure_type, _ in sorted(
+                categories.items(), key=lambda item: item[1], reverse=True
+            )
+        ]
+
+        fallbacks = [
+            "Improve retrieval quality (chunking, top-k, reranking) to raise "
+            "Context Recall before tuning generation",
+            "Extend the golden dataset with regression cases covering the "
+            "observed failures",
+            "Add an LLM-as-judge review step for low-scoring answers before "
+            "they reach users",
+        ]
+        for fallback in fallbacks:
+            if len(suggestions) >= 3:
+                break
+            if fallback not in suggestions:
+                suggestions.append(fallback)
+
+        return suggestions
 
 
 # ---------------------------------------------------------------------------
